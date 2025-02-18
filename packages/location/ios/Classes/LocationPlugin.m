@@ -107,6 +107,7 @@
       if (@available(iOS 11.0, *)) {
         self.clLocationManager.showsBackgroundLocationIndicator = enable;
       }
+      self.clLocationManager.pausesLocationUpdatesAutomatically = false;
       result(enable ? @1 : @0);
     } else {
       result(@0);
@@ -136,10 +137,12 @@
 
     if ([self isPermissionGranted]) {
       [self.clLocationManager startUpdatingLocation];
+      [self.clLocationManager startMonitoringSignificantLocationChanges];
     } else {
       [self requestPermission];
       if ([self isPermissionGranted]) {
         [self.clLocationManager startUpdatingLocation];
+        [self.clLocationManager startMonitoringSignificantLocationChanges];
       }
     }
   } else if ([call.method isEqualToString:@"hasPermission"]) {
