@@ -18,6 +18,10 @@
 @property(assign, nonatomic) BOOL flutterListening;
 @property(assign, nonatomic) BOOL hasInit;
 @property(assign, nonatomic) BOOL applicationHasLocationBackgroundMode;
+
+@property(assign, nonatomic) NSTimer * timer;
+@property(assign, nonatomic) double interval;
+
 @end
 
 @implementation LocationPlugin
@@ -44,6 +48,7 @@
     self.flutterListening = NO;
     self.waitNextLocation = 2;
     self.hasInit = NO;
+      self.interval = 0;
   }
   return self;
 }
@@ -88,6 +93,7 @@
         distanceFilter = kCLDistanceFilterNone;
       }
       self.clLocationManager.distanceFilter = distanceFilter;
+      self.interval = [call.arguments[@"interval"] doubleValue];
       result(@1);
     }
   } else if ([call.method isEqualToString:@"isBackgroundModeEnabled"]) {
@@ -107,6 +113,8 @@
       // if (@available(iOS 11.0, *)) {
       //   self.clLocationManager.showsBackgroundLocationIndicator = enable;
       // }
+      self.clLocationManager.pausesLocationUpdatesAutomatically = !enable;
+      // NSLog(@"%d", self.clLocationManager.pausesLocationUpdatesAutomatically);
       result(enable ? @1 : @0);
     } else {
       result(@0);
@@ -204,6 +212,29 @@
   }
 }
 
+- (void) startLocationUpdateTimerWithIntervalSeconds: (double) seconds{
+    if (self.timer == nil && seconds > 0) {
+        self.timer = [NSTimer scheduledTimerWithTimeInterval:seconds
+                                                     repeats:true
+                                                       block:^(NSTimer * _Nonnull timer) {
+            CLLocation * latestLocation = self.clLocationManager.location;
+            if (latestLocation != nil) {
+                double diff = [NSDate now].timeIntervalSince1970 - latestLocation.timestamp.timeIntervalSince1970;
+                if (diff > self.interval/1000) {
+                    [self locationManager:self.clLocationManager didUpdateLocations:@[latestLocation]];
+                }
+            }
+        }];
+    }
+}
+
+- (void) stopLocationUpdateTimer {
+    if (self.timer != nil) {
+        [self.timer invalidate];
+        self.timer = nil;
+    }
+}
+
 - (void)requestPermission {
 #if TARGET_OS_OSX
   if ([[NSBundle mainBundle]
@@ -290,6 +321,8 @@
 
   if ([self isPermissionGranted]) {
     [self.clLocationManager startUpdatingLocation];
+    [self.clLocationManager startMonitoringSignificantLocationChanges];
+    [self startLocationUpdateTimerWithIntervalSeconds: self.interval/1000];
   } else {
     [self requestPermission];
   }
@@ -300,6 +333,9 @@
 - (FlutterError *)onCancelWithArguments:(id)arguments {
   self.flutterListening = NO;
   [self.clLocationManager stopUpdatingLocation];
+  [self.clLocationManager stopMonitoringSignificantLocationChanges];
+  [self stopLocationUpdateTimer];
+    
   return nil;
 }
 
@@ -337,6 +373,8 @@
     self.flutterEventSink(coordinatesDict);
   } else {
     [self.clLocationManager stopUpdatingLocation];
+    [self.clLocationManager stopMonitoringSignificantLocationChanges];
+    [self stopLocationUpdateTimer];
     self.waitNextLocation = 2;
   }
 }
@@ -384,6 +422,12 @@
     }
   }
 #endif
+}
+
+-(void)locationManager:(CLLocationManager *)manager didFailWithError:(NSError *)error {
+    if (error != nil) {
+        NSLog(@"%@", error.debugDescription);
+    }
 }
 
 @end
