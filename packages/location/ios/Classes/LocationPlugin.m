@@ -21,6 +21,8 @@
 
 @property(assign, nonatomic) NSTimer * timer;
 @property(assign, nonatomic) double interval;
+@property(assign, nonatomic) double distanceFilter;
+@property(copy, nonatomic) CLLocation *lastLocation;
 
 @end
 
@@ -89,10 +91,11 @@
       self.clLocationManager.desiredAccuracy =
           [dictionary[call.arguments[@"accuracy"]] doubleValue];
       double distanceFilter = [call.arguments[@"distanceFilter"] doubleValue];
-      if (distanceFilter == 0) {
-        distanceFilter = kCLDistanceFilterNone;
-      }
-      self.clLocationManager.distanceFilter = distanceFilter;
+      // if (distanceFilter == 0) {
+      //   distanceFilter = kCLDistanceFilterNone;
+      // }
+      // self.clLocationManager.distanceFilter = distanceFilter;
+      self.distanceFilter = distanceFilter;
       self.interval = [call.arguments[@"interval"] doubleValue];
       result(@1);
     }
@@ -349,6 +352,19 @@
   }
   CLLocation *location = locations.lastObject;
 
+  // NOTE: 位置情報と時間のフィルタ
+  if (self.lastLocation != NULL) {
+      if ( [self.lastLocation distanceFromLocation:location] < self.distanceFilter) {
+          NSDate * lastTime = self.lastLocation.timestamp;
+          NSDate * now = location.timestamp;
+          NSTimeInterval diffTime = [now timeIntervalSinceDate:lastTime];
+          if (diffTime < self.interval/1000) {
+              // NSLog(@"[PASS] distance:%f, time:%f", [self.lastLocation distanceFromLocation:location], diffTime);
+              return;
+          }
+      }
+  }
+
   NSTimeInterval timeInSeconds = [location.timestamp timeIntervalSince1970];
   BOOL superiorToIos10 =
       [UIDevice currentDevice].systemVersion.floatValue >= 10;
@@ -377,6 +393,7 @@
     [self stopLocationUpdateTimer];
     self.waitNextLocation = 2;
   }
+  self.lastLocation = location;
 }
 
 - (void)locationManager:(CLLocationManager *)manager
